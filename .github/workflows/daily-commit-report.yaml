@@ -2,14 +2,15 @@ name: Daily Commit Report
 
 on:
   schedule:
-    - cron: '0 6 * * *'  # Daily at 6 AM IST
+    - cron: '0 6 * * *'  # Runs daily at 6 AM IST (~12:30 AM UTC)
   workflow_dispatch:
 
 jobs:
   commit-report:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout repo
+      - name: Checkout this repo
         uses: actions/checkout@v3
 
       - name: Set up Python
@@ -17,10 +18,10 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Install dependencies
+      - name: Install requests
         run: pip install requests
 
-      - name: Run commit reporter script
+      - name: Run Commit Reporter Script
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
@@ -47,21 +48,44 @@ jobs:
 
           for repo in repos:
               owner, name = repo.split("/")
-              url = f"https://api.github.com/repos/{owner}/{name}/commits?since={since}"
-              r = requests.get(url, headers=headers)
-              commits = r.json()
 
-              if not commits or isinstance(commits, dict) and 'message' in commits:
+              # Step 1: Get branches
+              branches_url = f"https://api.github.com/repos/{owner}/{name}/branches"
+              r = requests.get(branches_url, headers=headers)
+              branches = r.json()
+
+              if not isinstance(branches, list):
+                  report_lines.append(f"### 📁 {repo}\n⚠️ Could not fetch branches.\n")
+                  continue
+
+              all_commits = {}
+              for branch in branches:
+                  branch_name = branch['name']
+                  commits_url = f"https://api.github.com/repos/{owner}/{name}/commits?sha={branch_name}&since={since}"
+                  r = requests.get(commits_url, headers=headers)
+                  branch_commits = r.json()
+
+                  if not isinstance(branch_commits, list):
+                      continue
+
+                  for commit in branch_commits:
+                      sha = commit['sha']
+                      if sha not in all_commits:
+                          all_commits[sha] = {
+                              'message': commit['commit']['message'].splitlines()[0],
+                              'author': commit['commit']['author']['name'],
+                              'url': commit['html_url'],
+                              'branch': branch_name
+                          }
+
+              if not all_commits:
                   report_lines.append(f"### 📁 {repo}\n_No commits in the last 24 hours._\n")
                   continue
 
               report_lines.append(f"### 📁 {repo}")
-              for commit in commits:
-                  message = commit['commit']['message'].splitlines()[0]
-                  author = commit['commit']['author']['name']
-                  commit_url = commit['html_url']
-                  report_lines.append(f"- [{message}]({commit_url}) by **{author}**")
-              report_lines.append("")  # Blank line between repos
+              for commit in all_commits.values():
+                  report_lines.append(f"- [{commit['message']}]({commit['url']}) by **{commit['author']}** on `{commit['branch']}`")
+              report_lines.append("")
 
           final_message = f"📊 **GitHub Daily Commit Report** ({datetime.utcnow().date()})\n\n" + "\n".join(report_lines)
 
