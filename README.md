@@ -10,6 +10,7 @@ commit-monitor/
 └── .github/
     └── workflows/
         └── daily-commit-report.yaml # GitHub Actions workflow definition
+        
 ---
 
 ## 🚀 Features
