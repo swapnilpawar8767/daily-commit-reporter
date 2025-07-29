@@ -1,4 +1,4 @@
-name: Daily Commit Report
+name: Daily Commit Report (All Branches)
 
 on:
   schedule:
@@ -29,7 +29,7 @@ jobs:
           import os
           import requests
           from datetime import datetime, timedelta
-          
+
           GH_TOKEN = os.getenv("GH_TOKEN")
           TEAMS_WEBHOOK_URL = os.getenv("TEAMS_WEBHOOK_URL")
           headers = {
@@ -43,25 +43,51 @@ jobs:
               repos = [line.strip() for line in f if line.strip()]
 
           blocks = []
+
           for repo in repos:
               owner, name = repo.split("/")
-              url = f"https://api.github.com/repos/{owner}/{name}/commits?since={since}"
-              r = requests.get(url, headers=headers)
-              commits = r.json()
-              
-              if not commits or 'message' in commits:
-                  blocks.append(f"### {repo}\nNo commits in the last 24 hours.\n")
+              commit_lines = []
+              seen_commits = set()
+
+              # Get all branches
+              branches_url = f"https://api.github.com/repos/{owner}/{name}/branches"
+              branches_response = requests.get(branches_url, headers=headers)
+              branches = branches_response.json()
+
+              if isinstance(branches, dict) and 'message' in branches:
+                  blocks.append(f"### {repo}\n⚠️ Error fetching branches: {branches.get('message')}\n")
                   continue
 
-              commit_lines = [f"- [{c['commit']['message'].splitlines()[0]}]({c['html_url']}) by **{c['commit']['author']['name']}**"
-                              for c in commits]
-              blocks.append(f"### {repo}\n" + "\n".join(commit_lines))
+              for branch in branches:
+                  branch_name = branch["name"]
+                  commits_url = f"https://api.github.com/repos/{owner}/{name}/commits?sha={branch_name}&since={since}"
+                  commits_response = requests.get(commits_url, headers=headers)
+                  commits = commits_response.json()
+
+                  if isinstance(commits, dict) and 'message' in commits:
+                      continue
+
+                  for c in commits:
+                      sha = c["sha"]
+                      if sha in seen_commits:
+                          continue
+                      seen_commits.add(sha)
+                      title = c["commit"]["message"].splitlines()[0]
+                      author = c["commit"]["author"]["name"]
+                      link = c["html_url"]
+                      commit_lines.append(f"- [{title}]({link}) by **{author}** on `{branch_name}`")
+
+              if commit_lines:
+                  blocks.append(f"### {repo}\n" + "\n".join(commit_lines))
+              else:
+                  blocks.append(f"### {repo}\nNo commits in the last 24 hours across all branches.\n")
 
           message = "\n\n".join(blocks)
-
           payload = {
               "text": f"📊 *GitHub Daily Commit Report* ({datetime.utcnow().date()})\n\n{message}"
           }
 
-          requests.post(TEAMS_WEBHOOK_URL, json=payload)
+          response = requests.post(TEAMS_WEBHOOK_URL, json=payload)
+          if response.status_code != 200:
+              print("Failed to send message to Teams:", response.text)
           EOF
