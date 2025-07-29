@@ -2,13 +2,12 @@ name: Daily Commit Report
 
 on:
   schedule:
-    - cron: '0 6 * * *'  # Daily at 6 AM IST
+    - cron: '0 6 * * *'  # Runs daily at 6 AM IST (~12:30 AM UTC)
   workflow_dispatch:
 
 jobs:
   commit-report:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout this repo
         uses: actions/checkout@v3
@@ -33,7 +32,6 @@ jobs:
 
           GH_TOKEN = os.getenv("GH_TOKEN")
           TEAMS_WEBHOOK_URL = os.getenv("TEAMS_WEBHOOK_URL")
-
           headers = {
               "Authorization": f"Bearer {GH_TOKEN}",
               "Accept": "application/vnd.github+json"
@@ -42,60 +40,36 @@ jobs:
           since = (datetime.utcnow() - timedelta(days=1)).isoformat() + "Z"
 
           with open("repos.txt", "r") as f:
-              repos = [line.strip() for line in f if line.strip()]
+              lines = [line.strip() for line in f if line.strip()]
 
-          report_lines = []
+          blocks = []
+          for line in lines:
+              if ":" in line:
+                  repo, branch = line.split(":")
+              else:
+                  repo = line
+                  branch = "main"
 
-          for repo in repos:
               owner, name = repo.split("/")
-              branches_url = f"https://api.github.com/repos/{owner}/{name}/branches"
-              r = requests.get(branches_url, headers=headers)
-              branches = r.json()
+              url = f"https://api.github.com/repos/{owner}/{name}/commits?sha={branch}&since={since}"
+              r = requests.get(url, headers=headers)
+              commits = r.json()
 
-              if not isinstance(branches, list):
-                  report_lines.append(f"### 📁 {repo}\n⚠️ Could not fetch branches.\n")
+              if not commits or 'message' in commits:
+                  blocks.append(f"📁 **{repo}**\n_No commits in the last 24 hours on `{branch}`._\n")
                   continue
 
-              branch_commit_lines = []
-              seen = set()
+              commit_lines = [
+                  f"- `{branch}`: [{c['commit']['message'].splitlines()[0]}]({c['html_url']}) by **{c['commit']['author']['name']}**"
+                  for c in commits
+              ]
+              blocks.append(f"📁 **{repo}**\n" + "\n".join(commit_lines))
 
-              for branch in branches:
-                  branch_name = branch['name']
-                  commits_url = f"https://api.github.com/repos/{owner}/{name}/commits?sha={branch_name}&since={since}"
-                  r = requests.get(commits_url, headers=headers)
-                  commits = r.json()
-
-                  if not isinstance(commits, list):
-                      continue
-
-                  for commit in commits:
-                      sha = commit['sha']
-                      key = f"{sha}-{branch_name}"
-                      if key in seen:
-                          continue
-                      seen.add(key)
-
-                      msg = commit['commit']['message'].splitlines()[0]
-                      url = commit['html_url']
-                      author = commit['commit']['author']['name']
-                      branch_commit_lines.append(f"- [{msg}]({url}) by **{author}** on `{branch_name}`")
-
-              if not branch_commit_lines:
-                  report_lines.append(f"### 📁 {repo}\n_No commits in the last 24 hours._\n")
-              else:
-                  report_lines.append(f"### 📁 {repo}")
-                  report_lines.extend(branch_commit_lines)
-                  report_lines.append("")  # spacing
-
-          final_message = f"📊 **GitHub Daily Commit Report** ({datetime.utcnow().date()})\n\n" + "\n".join(report_lines)
+          message = "\n\n".join(blocks)
 
           payload = {
-              "text": final_message
+              "text": f"📊 *GitHub Daily Commit Report* ({datetime.utcnow().date()})\n\n{message}"
           }
 
-          response = requests.post(TEAMS_WEBHOOK_URL, json=payload)
-          if response.status_code != 200:
-              print(f"❌ Failed to send message: {response.status_code}\n{response.text}")
-          else:
-              print("✅ Report sent successfully.")
+          requests.post(TEAMS_WEBHOOK_URL, json=payload)
           EOF
