@@ -2,50 +2,66 @@ name: Daily Commit Report
 
 on:
   schedule:
-    - cron: '0 3 * * *'  # Runs daily at 9:00 AM IST (03:30 UTC)
-  workflow_dispatch:     # Manual trigger for testing
+    - cron: '0 6 * * *'  # Runs daily at 6 AM IST (~12:30 AM UTC)
+  workflow_dispatch:
 
 jobs:
-  report:
+  commit-report:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout
-      uses: actions/checkout@v3
+      - name: Checkout this repo
+        uses: actions/checkout@v3
 
-    - name: Get commits from all repos
-      env:
-        GH_TOKEN: ${{ secrets.GH_PAT_TOKEN }}
-        TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
-      run: |
-        echo "📝 Reading repository list..."
-        while read repo; do
-          echo "🔍 Checking commits for $repo"
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
 
-          commits=$(curl -s -H "Authorization: token $GH_TOKEN" \
-            "https://api.github.com/repos/$repo/commits?since=$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)")
+      - name: Install requests
+        run: pip install requests
 
-          count=$(echo "$commits" | jq length)
+      - name: Run Commit Reporter Script
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+        run: |
+          python <<EOF
+          import os
+          import requests
+          from datetime import datetime, timedelta
+          
+          GH_TOKEN = os.getenv("GH_TOKEN")
+          TEAMS_WEBHOOK_URL = os.getenv("TEAMS_WEBHOOK_URL")
+          headers = {
+              "Authorization": f"Bearer {GH_TOKEN}",
+              "Accept": "application/vnd.github+json"
+          }
 
-          if [ "$count" -eq 0 ]; then
-            report+="\n📁 **$repo**:\n_No commits in the last 24 hours._\n"
-          else
-            report+="\n📁 **$repo**:"
-            for row in $(echo "${commits}" | jq -r '.[] | @base64'); do
-              _jq() {
-                echo ${row} | base64 --decode | jq -r ${1}
-              }
-              commit_url=$(_jq '.html_url')
-              author=$(_jq '.commit.author.name')
-              message=$(_jq '.commit.message' | head -n 1)
-              report+="\n- [$message]($commit_url) by **$author**"
-            done
-            report+="\n"
-          fi
-        done < repos.txt
+          since = (datetime.utcnow() - timedelta(days=1)).isoformat() + "Z"
 
-        echo -e "🔔 Sending report to Teams..."
+          with open("repos.txt", "r") as f:
+              repos = [line.strip() for line in f if line.strip()]
 
-        payload=$(jq -n --arg msg "$report" '{ text: $msg }')
-        curl -H "Content-Type: application/json" -d "$payload" "$TEAMS_WEBHOOK_URL"
+          blocks = []
+          for repo in repos:
+              owner, name = repo.split("/")
+              url = f"https://api.github.com/repos/{owner}/{name}/commits?since={since}"
+              r = requests.get(url, headers=headers)
+              commits = r.json()
+              
+              if not commits or 'message' in commits:
+                  blocks.append(f"### {repo}\nNo commits in the last 24 hours.\n")
+                  continue
 
+              commit_lines = [f"- [{c['commit']['message'].splitlines()[0]}]({c['html_url']}) by **{c['commit']['author']['name']}**"
+                              for c in commits]
+              blocks.append(f"### {repo}\n" + "\n".join(commit_lines))
+
+          message = "\n\n".join(blocks)
+
+          payload = {
+              "text": f"📊 *GitHub Daily Commit Report* ({datetime.utcnow().date()})\n\n{message}"
+          }
+
+          requests.post(TEAMS_WEBHOOK_URL, json=payload)
+          EOF
