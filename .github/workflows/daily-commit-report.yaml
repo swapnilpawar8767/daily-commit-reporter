@@ -2,7 +2,7 @@ name: Daily Commit Report
 
 on:
   schedule:
-    - cron: '0 0 * * *'  # Daily at 6 AM IST
+    - cron: '0 6 * * *'  # Daily at 6 AM IST
   workflow_dispatch:
 
 jobs:
