@@ -6,10 +6,11 @@ This GitHub Actions workflow collects commits made across multiple repositories 
 ## 📁 Repository Structure
 
 commit-monitor/
-├── repos.txt # List of GitHub repositories (user/repo)
+├── repos.txt                  # List of repos (e.g., user/repo-name)
 └── .github/
     └── workflows/
-        └── daily-commit-report.yaml # GitHub Actions workflow definition
+        └── daily-commit-report.yaml
+
         
 ---
 
