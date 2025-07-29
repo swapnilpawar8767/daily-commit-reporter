@@ -78,7 +78,9 @@ jobs:
                       msg = commit['commit']['message'].splitlines()[0]
                       url = commit['html_url']
                       author = commit['commit']['author']['name']
-                      branch_commit_lines.append(f"- [{msg[:50] + '...' if len(msg) > 50 else msg}]({url}) (by **{author}** on branch `{branch_name}`)")
+                      # Debug print to verify branch_name
+                      print(f"Processing commit on branch: {branch_name}")
+                      branch_commit_lines.append(f"- {msg[:50] + '...' if len(msg) > 50 else msg} (by {author} on branch: {branch_name}) - [View]({url})")
 
               if not branch_commit_lines:
                   report_lines.append(f"### 📁 {repo}\n_No commits in the last 24 hours._\n")
