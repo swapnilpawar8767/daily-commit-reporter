@@ -78,25 +78,9 @@ jobs:
                       msg = commit['commit']['message'].splitlines()[0]
                       url = commit['html_url']
                       author = commit['commit']['author']['name']
-
-                      # Get file changes
-                      details_url = f"https://api.github.com/repos/{owner}/{name}/commits/{sha}"
-                      details_r = requests.get(details_url, headers=headers)
-                      files_changed = []
-
-                      if details_r.status_code == 200:
-                          commit_details = details_r.json()
-                          files_changed = [f['filename'] for f in commit_details.get('files', [])]
-
-                      file_list = ', '.join(files_changed) if files_changed else 'No files listed'
-
-                      branch_commit_lines.append(
-                          f"- **{msg[:50] + '...' if len(msg) > 50 else msg}**\n"
-                          f"  👤 Author: {author}\n"
-                          f"  🌿 Branch: {branch_name}\n"
-                          f"  🗂️ Files: {file_list}\n"
-                          f"  🔗 [View Commit]({url})\n"
-                      )
+                      # Debug print to verify branch_name
+                      print(f"Processing commit on branch: {branch_name}")
+                      branch_commit_lines.append(f"- {msg[:50] + '...' if len(msg) > 50 else msg} (by {author} on branch: {branch_name}) - [View]({url})")
 
               if not branch_commit_lines:
                   report_lines.append(f"### 📁 {repo}\n_No commits in the last 24 hours._\n")
