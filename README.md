@@ -8,7 +8,7 @@ This GitHub Actions workflow collects commits made across multiple repositories 
 commit-monitor/
 ├── repos.txt                  # List of repos (e.g., user/repo-name)
 
-└── .github/workflows/daily-commit-report.yaml
+     └── .github/workflows/daily-commit-report.yaml
 
 ---
 
