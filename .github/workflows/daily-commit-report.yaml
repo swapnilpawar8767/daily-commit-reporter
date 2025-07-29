@@ -48,8 +48,6 @@ jobs:
 
           for repo in repos:
               owner, name = repo.split("/")
-
-              # Step 1: Get branches
               branches_url = f"https://api.github.com/repos/{owner}/{name}/branches"
               r = requests.get(branches_url, headers=headers)
               branches = r.json()
@@ -58,33 +56,33 @@ jobs:
                   report_lines.append(f"### 📁 {repo}\n⚠️ Could not fetch branches.\n")
                   continue
 
-              all_commits = {}
+              seen_commits = {}
               for branch in branches:
                   branch_name = branch['name']
                   commits_url = f"https://api.github.com/repos/{owner}/{name}/commits?sha={branch_name}&since={since}"
                   r = requests.get(commits_url, headers=headers)
-                  branch_commits = r.json()
+                  commits = r.json()
 
-                  if not isinstance(branch_commits, list):
+                  if not isinstance(commits, list):
                       continue
 
-                  for commit in branch_commits:
+                  for commit in commits:
                       sha = commit['sha']
-                      if sha not in all_commits:
-                          all_commits[sha] = {
+                      if sha not in seen_commits:
+                          seen_commits[sha] = {
                               'message': commit['commit']['message'].splitlines()[0],
                               'author': commit['commit']['author']['name'],
                               'url': commit['html_url'],
                               'branch': branch_name
                           }
 
-              if not all_commits:
+              if not seen_commits:
                   report_lines.append(f"### 📁 {repo}\n_No commits in the last 24 hours._\n")
                   continue
 
               report_lines.append(f"### 📁 {repo}")
-              for commit in all_commits.values():
-                  report_lines.append(f"- [{commit['message']}]({commit['url']}) by **{commit['author']}** on `{commit['branch']}`")
+              for c in seen_commits.values():
+                  report_lines.append(f"- [{c['message']}]({c['url']}) by **{c['author']}** on `{c['branch']}`")
               report_lines.append("")
 
           final_message = f"📊 **GitHub Daily Commit Report** ({datetime.utcnow().date()})\n\n" + "\n".join(report_lines)
@@ -93,7 +91,9 @@ jobs:
               "text": final_message
           }
 
-          r = requests.post(TEAMS_WEBHOOK_URL, json=payload)
-          if r.status_code != 200:
-              print(f"Failed to send message: {r.status_code} - {r.text}")
+          response = requests.post(TEAMS_WEBHOOK_URL, json=payload)
+          if response.status_code != 200:
+              print(f"❌ Failed to send message: {response.status_code}\n{response.text}")
+          else:
+              print("✅ Report sent successfully.")
           EOF
