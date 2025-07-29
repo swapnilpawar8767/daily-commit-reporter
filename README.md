@@ -114,8 +114,3 @@ No commits in the last 24 hours.
   - Confirm commit timestamps are within UTC last 24 hours.
 
 ---
-
-## 👥 Author & Maintainer
-
-Created by [Swapnil Pawar](https://github.com/swap-1-test)  
-For internal use with GitHub Actions + Microsoft Teams integrations.
