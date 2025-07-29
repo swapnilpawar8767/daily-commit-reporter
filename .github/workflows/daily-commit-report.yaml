@@ -1,1 +1,51 @@
+name: Daily Commit Report
+
+on:
+  schedule:
+    - cron: '0 3 * * *'  # Runs daily at 9:00 AM IST (03:30 UTC)
+  workflow_dispatch:     # Manual trigger for testing
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Get commits from all repos
+      env:
+        GH_TOKEN: ${{ secrets.GH_PAT_TOKEN }}
+        TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+      run: |
+        echo "📝 Reading repository list..."
+        while read repo; do
+          echo "🔍 Checking commits for $repo"
+
+          commits=$(curl -s -H "Authorization: token $GH_TOKEN" \
+            "https://api.github.com/repos/$repo/commits?since=$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)")
+
+          count=$(echo "$commits" | jq length)
+
+          if [ "$count" -eq 0 ]; then
+            report+="\n📁 **$repo**:\n_No commits in the last 24 hours._\n"
+          else
+            report+="\n📁 **$repo**:"
+            for row in $(echo "${commits}" | jq -r '.[] | @base64'); do
+              _jq() {
+                echo ${row} | base64 --decode | jq -r ${1}
+              }
+              commit_url=$(_jq '.html_url')
+              author=$(_jq '.commit.author.name')
+              message=$(_jq '.commit.message' | head -n 1)
+              report+="\n- [$message]($commit_url) by **$author**"
+            done
+            report+="\n"
+          fi
+        done < repos.txt
+
+        echo -e "🔔 Sending report to Teams..."
+
+        payload=$(jq -n --arg msg "$report" '{ text: $msg }')
+        curl -H "Content-Type: application/json" -d "$payload" "$TEAMS_WEBHOOK_URL"
 
