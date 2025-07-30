@@ -33,8 +33,9 @@ To access multiple private or public repositories from a central repo:
 - Under **Repository Access**, select **"Only select repositories"** → Choose the ones you want to monitor.
 - Under **Permissions**, enable the following:
 
-Contents: Read-only
-Metadata: Read-only
+--Required
+**@Contents: Read-only
+@Metadata: Read-only**
 
 - Click **Generate Token**, then copy it.
 
